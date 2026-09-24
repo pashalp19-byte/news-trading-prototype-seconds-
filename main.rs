@@ -1,7 +1,7 @@
 mod auth;
 
 use auth::{generate_auth_json, generate_subcription_json};
-use chrono::UTC;
+use chrono::Utc;
 use futures-util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use std::time::instant;
@@ -28,19 +28,19 @@ async fn main() {
     let api_key = "YOUR_REAL_TIME_API_KEY"; //replace with your credential key
     let target_symbols = vec!["EURUSD", "GBPUSD"];
 
-    printin!(" initializing rust news trading ingestion core...");
+    println!(" initializing rust news trading ingestion core...");
 
     //2.establish secure TLS websocket connection
     let (ws_stream, _) = connect_async(ws_url)
      .await
      .expect("critical: failed to bind to target secure socket");
     let (mut write, mut read) = ws_stream.split();
-    printin!("  Handshake complete. TCP stream connected.");
+    println!("  Handshake complete. TCP stream connected.");
 
     //3. format and send the json authentication message
     let auth_msg = generate_auth_json(api_key);
     write.send(Message::Text(auth_msg)).await.expect("failed to dispatch auth payload");
-    printin!("   Authentication frame dispatch to server.");
+    println!("   Authentication frame dispatch to server.");
 
     //4.instantiate lockless bounded channel for logic decoupling
     let(tx, mut rx) = mpsc::channel::<MarketTick>(5000);
@@ -55,15 +55,15 @@ async fn main() {
                     //check if server accepted credentials before parsing data ticks
                     if !authenticated {
                         if text.contains("login_ok") {// common confirmation flag from market data nodes
-                            printin!("   Authentication confirmed by server!");
+                            println!("   Authentication confirmed by server!");
                             authenticated = true;
 
                             //send sub commands immediately
                             let sub_msg = generate_subcription_json(target_symbols.clone());
                             let_ = write.send(Message::Text(sub_msg)).await;
-                            printin!("  subscription request broadcasted for instruments.");       
+                            println!("  subscription request broadcasted for instruments.");       
                         } else if text.contains("reject") {
-                            eprintin!("   Authentication Rejected! Verify streaming credential keys.");
+                            eprintln!("   Authentication Rejected! Verify streaming credential keys.");
                             break;
                         } 
                         continue;
@@ -77,7 +77,7 @@ async fn main() {
                     }
                 }
                 ok(Message::Close(_)) => {
-                    printin!("   stream closed by external host.")
+                    println!("   stream closed by external host.")
                     break;
                 }
                 _=> {}
@@ -86,7 +86,7 @@ async fn main() {
     });
     //TASK 2: Logic Evaluation & execution Trigger (Main Processing Thread)
     let mut baseline_bid = 0.0;
-    printin!("  Processing thread active. monitoring tick matrix...");
+     println!("  Processing thread active. monitoring tick matrix...");
 
     while let some(tick) = rx.rec().await {
         let  processing_timer = Instant::now();
@@ -97,21 +97,21 @@ async fn main() {
 
             //News Event Tracking Trigger (Example: 4 pip breakout threshold)
             if direct_delta.abs() >= 0.0004 {
-                let local_epoch = UTC::now().timestamp_millis();                
+                let local_epoch = Utc::now().timestamp_millis();                
                 let network_transit_lag = local_epoch - tick.server_time_ms;
 
-                printin!("\n=== [NEWS BREAKOUT VOLATILITY MATCH] ===");
-                printin!("instrument: {} | move: {:.5} | Active spread: {:.5}", ticksymbol, direct_delta, spread);
-                printin!("Transit Delay: {}ms", network_transit_lag);
+                println!("\n=== [NEWS BREAKOUT VOLATILITY MATCH] ===");
+                println!("instrument: {} | move: {:.5} | Active spread: {:.5}", ticksymbol, direct_delta, spread);
+                println!("Transit Delay: {}ms", network_transit_lag);
 
                 //safe simulation verfication  guards  for your $10 account
                 if spread > 0.00015 {
-                    printin!("   execution aborted: spread too wide ({:.5}). A $10 account will instantly margin call.", spread);
+                    println!("   execution aborted: spread too wide ({:.5}). A $10 account will instantly margin call.", spread);
                 } else if network_transit_lag > 120 {
-                    printin!("  execution aborted: high network jitter ({}ms). order entry would face massive slippage.", network_transit_lag);
+                    println!("  execution aborted: high network jitter ({}ms). order entry would face massive slippage.", network_transit_lag);
                 } else {
                     let internal latency = processing_timer.elasped().as_micros();
-                    printin!("  execution signal sent vai local loop bridge in {}μs!", internal_latency);
+                    println!("  execution signal sent vai local loop bridge in {}μs!", internal_latency);
 
                     //this is where you call your local execution 
                     // execute_exness_order_via_bridge("buy", tick.symbol, 0.01);
